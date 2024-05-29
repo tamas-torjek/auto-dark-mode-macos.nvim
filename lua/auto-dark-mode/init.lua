@@ -15,27 +15,12 @@ local update_interval
 
 ---@type string
 local query_command
----@type "Linux" | "Darwin" | "Windows_NT" | "WSL"
-local system
 
 -- Parses the query response for each system
 ---@param res string
 ---@return boolean
 local function parse_query_response(res)
-	if system == "Linux" then
-		-- https://github.com/flatpak/xdg-desktop-portal/blob/c0f0eb103effdcf3701a1bf53f12fe953fbf0b75/data/org.freedesktop.impl.portal.Settings.xml#L32-L46
-		-- 0: no preference
-		-- 1: dark
-		-- 2: light
-		return string.match(res, "uint32 1") ~= nil
-	elseif system == "Darwin" then
-		return res == "Dark"
-	elseif system == "Windows_NT" or system == "WSL" then
-		-- AppsUseLightTheme    REG_DWORD    0x0 : dark
-		-- AppsUseLightTheme    REG_DWORD    0x1 : light
-		return string.match(res, "1") == nil
-	end
-	return false
+	return res == "Dark"
 end
 
 ---@param callback fun(is_dark_mode: boolean)
@@ -70,37 +55,7 @@ local function start_check_timer()
 end
 
 local function init()
-	if string.match(vim.loop.os_uname().release, "WSL") then
-		system = "WSL"
-	else
-		system = vim.loop.os_uname().sysname
-	end
-
-	if system == "Darwin" then
-		query_command = "defaults read -g AppleInterfaceStyle"
-	elseif system == "Linux" then
-		if not vim.fn.executable("dbus-send") then
-			error([[
-		`dbus-send` is not available. The Linux implementation of
-		auto-dark-mode.nvim relies on `dbus-send` being on the `$PATH`.
-	  ]])
-		end
-
-		query_command = table.concat({
-			"dbus-send --session --print-reply=literal --reply-timeout=1000",
-			"--dest=org.freedesktop.portal.Desktop",
-			"/org/freedesktop/portal/desktop",
-			"org.freedesktop.portal.Settings.Read",
-			"string:'org.freedesktop.appearance'",
-			"string:'color-scheme'",
-		}, " ")
-	elseif system == "Windows_NT" or system == "WSL" then
-		-- Don't swap the quotes; it breaks the code
-		query_command =
-			'reg.exe Query "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" /v AppsUseLightTheme | findstr.exe "AppsUseLightTheme"'
-	else
-		return
-	end
+	query_command = "defaults read -g AppleInterfaceStyle"
 
 	if vim.fn.has("unix") ~= 0 then
 		if vim.loop.getuid() == 0 then
